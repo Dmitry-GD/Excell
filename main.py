@@ -1,256 +1,433 @@
 import openpyxl as op
+import openpyxl.styles.numbers
 import os
 import time
-
-import openpyxl.styles.numbers
-
-
-def get_info(wb):
-    sum_in_information = 0
-    sum_in_registration = 0
-    sum_out_information = 0
-    sum_out_registration = 0
-    sheet = wb['Прием обращений']
+'''
+# ОБРАБОТКА ФАЙЛА ШПАРГАЛКИ И ЗАПОЛНЕНИЕ ШАБЛОНОВ ПО НЕМУ
+def read_template(sheet_name: str, template_name: dict[str, list]) -> None:
+    """
+    Функция считывания полей шаблона
+    :param sheet_name: str
+    :param template_name: dict[str, list]
+    :return: None
+    """
+    sheet = wb[sheet_name]
     max_row = sheet.max_row
-    for i in range(2, max_row + 1):
-        if 'Предоставление' in sheet.cell(row=i, column=5).value:
-            sum_in_information += sheet.cell(row=i, column=3).value
-        else:
-            sum_in_registration += sheet.cell(row=i, column=3).value
+    if sheet.cell(row=7, column=5).value == None:
+        for i in range(8, max_row):
+            template_name[sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')] = [sheet.cell(row=i, column=9).value,
+                                                                        sheet.cell(row=i, column=10).value,
+                                                                        sheet.cell(row=i, column=14).value,
+                                                                        sheet.cell(row=i, column=15).value,
+                                                                        sheet.cell(row=i, column=16).value,
+                                                                        sheet.cell(row=i, column=17).value,
+                                                                        sheet.cell(row=i, column=20).value
+                                                                        ]
+            if 'фоив' in sheet_name.lower() and 'государственный кадастровый учет недвижимого имущества' in sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', ''):
+                template_name[sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')].append(sheet.cell(row=i, column=7).value)
+                template_name[sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')].append(sheet.cell(row=i, column=8).value)
+                template_name[sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')].append(sheet.cell(row=i, column=12).value)
+                template_name[sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')].append(sheet.cell(row=i, column=13).value)
+            if 'фоив' in sheet_name.lower() and 'предоставление сведений, содержащихся в едином государственном реестре' in sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', ''):
+                template_name[sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')].append(sheet.cell(row=i, column=7).value)
+                template_name[sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')].append(sheet.cell(row=i, column=12).value)
 
-    sheet = wb['Выданные обращения']
+def write_template(sheet_name: str, template_name: dict[str, list], not_tosp = True) -> None:
+    """
+    Функция записи полей таблицы из шаблона
+    :param sheet_name: str
+        :param template_name: dict[str, list]
+        :return: None
+        """
+    sheet = wb[sheet_name]
     max_row = sheet.max_row
-    for i in range(2, max_row + 1):
-        if 'Предоставление' in sheet.cell(row=i, column=6).value:
-            sum_out_information += sheet.cell(row=i, column=5).value
-        else:
-            sum_out_registration += sheet.cell(row=i, column=5).value
-    return int(sum_in_information), int(sum_in_registration), int(sum_out_information), int(sum_out_registration)
+    key_list = tuple(template_name.keys())
+    change_key_counter = 0
+    errors_name = []
+    if sheet.cell(row=7, column=5).value == None:
+        for i in range(8, max_row):
+            if sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '') == key_list[i-8]:
+                key = sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')
+            else:
+                key = key_list[i-8]
+                change_key_counter += 1
+                temp = tuple([i-7, sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', ''), key_list[i-8]])
+                errors_name.append(temp)
+            sheet.cell(row=i, column=9).value = template_name[key][0]
+            sheet.cell(row=i, column=10).value = template_name[key][1]
+            sheet.cell(row=i, column=14).value = template_name[key][2]
+            sheet.cell(row=i, column=15).value = template_name[key][3]
+            sheet.cell(row=i, column=16).value = template_name[key][4]
+            sheet.cell(row=i, column=17).value = template_name[key][5]
+            sheet.cell(row=i, column=20).value = template_name[key][6]
+            if not_tosp:
+                if 'государственный кадастровый учет недвижимого имущества' in sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', ''):
+                    sheet.cell(row=i, column=7).value = template_name[key][7]
+                    sheet.cell(row=i, column=8).value = template_name[key][8]
+                    sheet.cell(row=i, column=12).value = template_name[key][9]
+                    sheet.cell(row=i, column=13).value = template_name[key][10]
+                if 'предоставление сведений, содержащихся в едином государственном реестре' in sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', ''):
+                    sheet.cell(row=i, column=7).value = template_name[key][7]
+                    sheet.cell(row=i, column=12).value = template_name[key][8]
+            sheet.cell(row=max_row, column=19).value = 0
+    if change_key_counter > 0:
+        print('*****************************')
+        print('В листе', sheet_name, 'было найдено', change_key_counter, 'несостыковок названий услуг:')
+        for item in errors_name:
+            print(f'   В услуге № {item[0]}:\nНазвание в файле:     {item[1]}\nНазвание в шпаргалке: {item[2]}')
+            print('--------------------------------')
+        print('*****************************')
 
-# Раздел с формированием имен выводимых файлов по месяцу
-mon_list = {1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель', 5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август', 9: 'Сентябрь', 10: 'Октярбь', 11: 'Ноябрь', 12: 'Декабрь'}
-now_time = time.localtime()
-if now_time.tm_mon == 1:
-    pred_mon = 12
-else:
-    pred_mon = now_time.tm_mon-1
-mon_for_name = mon_list[pred_mon]
+# Формирование списка файлв для обработки
+file_list = os.listdir()    # просмотр файловой системы
+template_file_name = ['', '', '', '', '', '']
+for item in file_list:
+    if 'шпаргалка' in item.lower():
+        template_file = item      # Эксель файл с шаблоном заполнения
+    elif 'фоив' in item.lower() and 'тосп' not in item.lower():
+        template_file_name[0] = item
+    elif 'роив' in item.lower():
+        template_file_name[1] = item
+    elif 'омсу' in item.lower():
+        template_file_name[2] = item
+    elif 'иные' in item.lower() and 'тосп' not in item.lower():
+        template_file_name[3] = item
+    elif 'фоив' in item.lower() and 'тосп' in item.lower():
+        template_file_name[4] = item
+    elif 'иные' in item.lower() and 'тосп' in item.lower():
+        template_file_name[5] = item
+print(f'Найдено {len(template_file_name)} файлов с именами :{template_file_name}')
+
+# Обработка файла ШПАРГАЛКИ
+wb = op.load_workbook(template_file, data_only=True)
+template_foiv = {}
+template_roiv = {}
+template_omsu = {}
+template_inie = {}
+sheet_list = []
+for item in wb.sheetnames:
+    if 'фоив' in item.lower() and 'бизнес' not in item.lower():
+        sheet_list.append(item)
+    elif 'роив' in item.lower() and 'бизнес' not in item.lower():
+        sheet_list.append(item)
+    elif 'омсу' in item.lower() and 'бизнес' not in item.lower():
+        sheet_list.append(item)
+    elif 'иных' in item.lower() and 'бизнес' not in item.lower():
+        sheet_list.append(item)
+read_template(sheet_list[0], template_foiv)
+read_template(sheet_list[1], template_roiv)
+read_template(sheet_list[2], template_omsu)
+read_template(sheet_list[3], template_inie)
+wb.close()
+
+# НАЧАЛО ЗАПОЛНЕНИЯ ШАБЛОНОВ по шпаргалке
+
+# Открываем ФОИВ для заполнения
+wb = op.load_workbook(template_file_name[0], data_only=True)
+print(f'Начало обработки файла {template_file_name[0]}')
+write_template('5007', template_foiv)
+write_template('366', template_foiv)
+print(f'Обработка {template_file_name[0]} завершена!!!')
+wb.save('ФОИВ заполненный по шпаргалке.xlsx')
+
+# Открываем РОИВ для заполнения
+wb = op.load_workbook(template_file_name[1], data_only=True)
+print(f'Начало обработки файла {template_file_name[1]}')
+write_template('5007', template_roiv)
+write_template('366', template_roiv)
+print(f'Обработка {template_file_name[1]} завершена!!!')
+wb.save('РОИВ заполненный по шпаргалке.xlsx')
+
+# Открываем ОМСУ для заполнения
+wb = op.load_workbook(template_file_name[2], data_only=True)
+print(f'Начало обработки файла {template_file_name[2]}')
+write_template('5007', template_omsu)
+write_template('366', template_omsu)
+print(f'Обработка {template_file_name[2]} завершена!!!')
+wb.save('ОМСУ заполненный по шпаргалке.xlsx')
+
+# Открываем ИНЫЕ УСЛУГИ для заполнения
+wb = op.load_workbook(template_file_name[3], data_only=True)
+print(f'Начало обработки файла {template_file_name[3]}')
+write_template('5007', template_inie)
+write_template('366', template_inie)
+print(f'Обработка {template_file_name[3]} завершена!!!')
+wb.save('ИНЫЕ УСЛУГИ заполненный по шпаргалке.xlsx')
+
+# Открываем ФОИВ ТОСП для заполнения
+wb = op.load_workbook(template_file_name[4], data_only=True)
+print(f'Начало обработки файла {template_file_name[4]}')
+write_template('9000437', template_foiv, not_tosp=False)
+write_template('9000436', template_foiv, not_tosp=False)
+write_template('9000441', template_foiv, not_tosp=False)
+write_template('9000438', template_foiv, not_tosp=False)
+write_template('9000440', template_foiv, not_tosp=False)
+write_template('9000439', template_foiv, not_tosp=False)
+print(f'Обработка {template_file_name[4]} завершена!!!')
+wb.save('ФОИВ ТОСП заполненный по шпаргалке.xlsx')
+
+# Открываем ИНЫЕ УСЛУГИ ТОСП для заполнения
+wb = op.load_workbook(template_file_name[5], data_only=True)
+print(f'Начало обработки файла {template_file_name[5]}')
+write_template('9000437', template_inie, not_tosp=False)
+write_template('9000436', template_inie, not_tosp=False)
+write_template('9000441', template_inie, not_tosp=False)
+write_template('9000438', template_inie, not_tosp=False)
+write_template('9000440', template_inie, not_tosp=False)
+write_template('9000439', template_inie, not_tosp=False)
+print(f'Обработка {template_file_name[5]} завершена!!!')
+wb.save('ИНЫЕ УСЛУГИ ТОСП заполненный по шпаргалке.xlsx')
+
+all_uslugi = list(template_foiv.keys()) + list(template_roiv.keys()) + list(template_omsu.keys()) + list(template_inie.keys()) # полный список услуг
+'''
 
 
-file_list = os.listdir()    #Формирование списка файлов для работы
-file_names = ['','','','']
-for el in file_list:
-    if 'ленин' in el.lower() and 'минэконом' not in el.lower():
-        file_names[0] = el      # 0 ПВД по ЛЕНИНА
-    elif 'ильич' in el.lower() and 'минэконом' not in el.lower():
-        file_names[1] = el      # 1 ПВД по ИЛЬИЧА
-    elif 'свер' in el.lower():
-        file_names[2] = el      # 2 Общий ОТЧЕТ по сверкам для директора
-    elif 'минэконом' in el.lower() and 'пвд' not in el.lower():
-        file_names[3] = el      # 3 Отчет по ТОСП из Минэкономразвития по ЛЕНИНА
 
+# !!! !!! !!! Начало обработки отчетов выгруженных из АИС !!! !!! !!!
+result_ilicha = {}
+result_lenina = {}
 
-filename = file_names[0]
-wb = op.load_workbook(filename, data_only=True)
-sum_105_in_information = 0
-sum_105_in_registration = 0
-sum_105_out_information = 0
-sum_105_out_registration = 0
-sum_105_in_information, sum_105_in_registration, sum_105_out_information, sum_105_out_registration = get_info(wb)
-print('ОТЧЕТ ПВД')
-print('По офису Ленина (Администрация):')
-print()
-print('Принято сведений из ЕГРН:', sum_105_in_information)
-print('Принято регистраций:', sum_105_in_registration)
-print('***************************')
-print('Выдано сведений из ЕГРН:', sum_105_out_information)
-print('Выдано регистраций:', sum_105_out_registration)
-print()
-
-
-filename = file_names[1]
-wb = op.load_workbook(filename, data_only=True)
-sum_172_in_information = 0
-sum_172_in_registration = 0
-sum_172_out_information = 0
-sum_172_out_registration = 0
-sum_172_in_information, sum_172_in_registration, sum_172_out_information, sum_172_out_registration = get_info(wb)
-print('По офису Ильича (Станция):')
-print()
-print('Принято сведений из ЕГРН:', sum_172_in_information)
-print('Принято регистраций:', sum_172_in_registration)
-print('***************************')
-print('Выдано сведений из ЕГРН:', sum_172_out_information)
-print('Выдано регистраций:', sum_172_out_registration)
-
-
-
-wb = op.Workbook()
-sheet = wb.active
-sheet.cell(row=1, column=1).value = 'По офису на Ленина:'
-sheet.cell(row=1, column=1).font = openpyxl.styles.Font(size=14, bold=True)
-sheet.cell(row=2, column=1).value = 'Принято сведений из ЕГРН:'
-sheet.cell(row=3, column=1).value = 'Принято регистраций:'
-sheet.cell(row=2, column=2).value = sum_105_in_information
-sheet.cell(row=3, column=2).value = sum_105_in_registration
-sheet.cell(row=4, column=1).value = 'Выдано сведений из ЕГРН:'
-sheet.cell(row=5, column=1).value = 'Выдано регистраций:'
-sheet.cell(row=4, column=2).value = sum_105_out_information
-sheet.cell(row=5, column=2).value = sum_105_out_registration
-
-sheet.cell(row=9, column=1).value = 'По офису на Ильича:'
-sheet.cell(row=9, column=1).font = openpyxl.styles.Font(size=14, bold=True)
-sheet.cell(row=10, column=1).value = 'Принято сведений из ЕГРН:'
-sheet.cell(row=11, column=1).value = 'Принято регистраций:'
-sheet.cell(row=10, column=2).value = sum_172_in_information
-sheet.cell(row=11, column=2).value = sum_172_in_registration
-sheet.cell(row=12, column=1).value = 'Выдано сведений из ЕГРН:'
-sheet.cell(row=13, column=1).value = 'Выдано регистраций:'
-sheet.cell(row=12, column=2).value = sum_172_out_information
-sheet.cell(row=13, column=2).value = sum_172_out_registration
-wb.save(f'Готовый отчет за {mon_for_name} для директора по ПВД.xlsx')
-
-
-
-print()
-print('*********************************************************************************')
-print()
-print('ОТЧЕТ ПО СВЕРКАМ')
-filename = file_names[2]
-wb = op.load_workbook(filename, data_only=True)
-sheet = wb['Отчёт']
+# ОТЧЕТЫ ПВД !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!
+# Обработка отчета ПВД по Ильича <<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>>
+file_list = os.listdir()    # просмотр файловой системы
+for item in file_list:
+    if 'ильича' in item.lower() and 'пвд' in item.lower():
+        file = item
+wb = op.load_workbook(file, data_only=True)
+# <<< ЛИСТ ПРИНЯТЫХ ОБРАЩЕНИЙ >>>
+sheet = wb['Прием обращений']
 max_row = sheet.max_row
-bd_sv = ['mfc-kashira', 'mfc-kashira-ilicha']
-lenina_dic = {}
-ilicha_dic = {}
+temp_predostavlenie = set()
+temp_registration = set()
 for i in range(2, max_row + 1):
-    if 'mfc-kashira' == sheet.cell(row=i, column=4).value:
-        if sheet.cell(row=i, column=7).value not in lenina_dic.keys():
-            lenina_dic[sheet.cell(row=i, column=7).value] = 1
-        else:
-            lenina_dic [sheet.cell(row=i, column=7).value] += 1
-    elif 'mfc-kashira-ilicha' == sheet.cell(row=i, column=4).value:
-        if sheet.cell(row=i, column=7).value not in ilicha_dic.keys():
-            ilicha_dic[sheet.cell(row=i, column=7).value] = 1
-        else:
-            ilicha_dic[sheet.cell(row=i, column=7).value] += 1
-print('По Ленина услуг =', len(lenina_dic), 'и', sum(lenina_dic.values()), 'сверок в общей сложности')
-print('По Ленина услуг =', len(ilicha_dic), 'и', sum(ilicha_dic.values()), 'сверок в общей сложности')
-print()
-print('По Ленина:')
-print(*sorted(lenina_dic.items()), sep='\n')
-print()
-print('По Ильича:')
-print(*sorted(ilicha_dic.items()), sep='\n')
-
-wb = op.Workbook()
-sheet = wb.active
-v_row = 1
-sheet.cell(row=v_row, column=1).value = 'Сверок по офису на Ленина:'
-sheet.cell(row=v_row, column=1).font = openpyxl.styles.Font(size=14, bold=True)
-v_row += 1
-for key, value in sorted(lenina_dic.items()):
-    sheet.cell(row=v_row, column=1).value = key
-    sheet.cell(row=v_row, column=2).value = value
-    v_row += 1
-v_row += 1
-sheet.cell(row=v_row, column=1).value = 'ИТОГО СВЕРОК НА ЛЕНИНА:'
-sheet.cell(row=v_row, column=1).font = openpyxl.styles.Font(size=12, bold=True)
-sheet.cell(row=v_row, column=2).value = sum(lenina_dic.values())
-sheet.cell(row=v_row, column=2).font = openpyxl.styles.Font(size=12, bold=True)
-
-v_row += 3
-sheet.cell(row=v_row, column=1).value = 'Сверок по офису на Ильича:'
-sheet.cell(row=v_row, column=1).font = openpyxl.styles.Font(size=14, bold=True)
-v_row += 1
-for key, value in sorted(ilicha_dic.items()):
-    sheet.cell(row=v_row, column=1).value = key
-    sheet.cell(row=v_row, column=2).value = value
-    v_row += 1
-v_row += 1
-sheet.cell(row=v_row, column=1).value = 'ИТОГО СВЕРОК НА ИЛЬИЧА:'
-sheet.cell(row=v_row, column=1).font = openpyxl.styles.Font(size=12, bold=True)
-sheet.cell(row=v_row, column=2).value = sum(ilicha_dic.values())
-sheet.cell(row=v_row, column=2).font = openpyxl.styles.Font(size=12, bold=True)
-
-wb.save(f'Готовый отчет за {mon_for_name} для директора по сверкам.xlsx')
-
-# Отчет по сверкам
-filename = file_names[3]
-wb = op.load_workbook(filename, data_only=True)
-sheet = wb['Сводные данные (ТОСП)']
+    if 'предоставление' in sheet.cell(row=i, column=5).value.lower():
+        temp_predostavlenie.add(sheet.cell(row=i, column=2).value)
+    else:
+        temp_registration.add(sheet.cell(row=i, column=2).value)
+result_ilicha['предоставление сведений, содержащихся в Едином государственном реестре недвижимости'] = [None, None, None, None, None, None, None, None, None]
+result_ilicha['государственный кадастровый учет недвижимого имущества и (или) государственная регистрация прав на недвижимое имущество'] = [None, None, None, None, None, None, None, None, None, None, None]
+result_ilicha['предоставление сведений, содержащихся в Едином государственном реестре недвижимости'][7] = len(temp_predostavlenie)
+result_ilicha['государственный кадастровый учет недвижимого имущества и (или) государственная регистрация прав на недвижимое имущество'][7] = len(temp_registration)
+# <<< ЛИСТ ВЫДАННЫХ ОБРАЩЕНИЙ >>>
+sheet = wb['Выданные обращения']
 max_row = sheet.max_row
-temp = {}
-name_urm =[['УРМ Ожерелье', 'ожерелье', 'ожерелье'], ['УРМ Базаровское (Зендиково)', 'базаровское', 'зендиково'], ['УРМ Колтовское (Тарасково)', 'колтовское', 'тарасково'], ['УРМ Топкановское (Богатищево)', 'топкановское',  'богатищево']]
-
-# Заполнение данными из таблицы
-in_urlic = 0
-out_urlic = 0
-for i in range(5, max_row + 1):
-    name_urm_new = ''
-    for j in range(len(name_urm)):
-        if name_urm[j][1] in (sheet.cell(row=i, column=1).value).lower():
-            name_urm_new = name_urm[j][0]
-            break
+temp_predostavlenie = set()
+temp_registration = set()
+for i in range(2, max_row + 1):
+    if 'предоставление' in sheet.cell(row=i, column=6).value.lower():
+        temp_predostavlenie.add(sheet.cell(row=i, column=3).value)
     else:
-        name_urm_new = sheet.cell(row=i, column=1).value + ' УЖЕ ЗАКРЫТ!!!'
-    temp.setdefault(name_urm_new, {}).setdefault(sheet.cell(row=i, column=2).value.rstrip(), [0,0,0,0,0])
-    temp[name_urm_new][sheet.cell(row=i, column=2).value.rstrip()][0] += int(sheet.cell(row=i, column=4).value)  # Поступивших от физиков
-    temp[name_urm_new][sheet.cell(row=i, column=2).value.rstrip()][1] += int(sheet.cell(row=i, column=5).value)  # Поступивших от юриков (по идее 0)
-    temp[name_urm_new][sheet.cell(row=i, column=2).value.rstrip()][2] += int(sheet.cell(row=i, column=7).value)  # Выданых физикам
-    temp[name_urm_new][sheet.cell(row=i, column=2).value.rstrip()][3] += int(sheet.cell(row=i, column=8).value)  # Выданых юрикам (по идее 0)
-    temp[name_urm_new][sheet.cell(row=i, column=2).value.rstrip()][4] += int(sheet.cell(row=i, column=10).value)  # Консультаций
-    if int(sheet.cell(row=i, column=5).value) > 0:
-        in_urlic += int(sheet.cell(row=i, column=5).value)
-    if int(sheet.cell(row=i, column=8).value) > 0:
-        out_urlic += int(sheet.cell(row=i, column=8).value)
+        temp_registration.add(sheet.cell(row=i, column=3).value)
+result_ilicha['предоставление сведений, содержащихся в Едином государственном реестре недвижимости'][8] = len(temp_predostavlenie)
+result_ilicha['государственный кадастровый учет недвижимого имущества и (или) государственная регистрация прав на недвижимое имущество'][9] = len(temp_registration)
+wb.close()
+# Обработка отчета ПВД по Ленина <<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>>
+file_list = os.listdir()    # просмотр файловой системы
+for item in file_list:
+    if 'ленина' in item.lower() and 'пвд' in item.lower():
+        file = item
+wb = op.load_workbook(file, data_only=True)
+# <<< ЛИСТ ПРИНЯТЫХ ОБРАЩЕНИЙ >>>
+sheet = wb['Прием обращений']
+max_row = sheet.max_row
+temp_predostavlenie = set()
+temp_registration = set()
+for i in range(2, max_row + 1):
+    if 'предоставление' in sheet.cell(row=i, column=5).value.lower():
+        temp_predostavlenie.add(sheet.cell(row=i, column=2).value)
+    else:
+        temp_registration.add(sheet.cell(row=i, column=2).value)
+result_lenina['предоставление сведений, содержащихся в Едином государственном реестре недвижимости'] = [None, None, None, None, None, None, None, None, None]
+result_lenina['государственный кадастровый учет недвижимого имущества и (или) государственная регистрация прав на недвижимое имущество'] = [None, None, None, None, None, None, None, None, None, None, None]
+result_lenina['предоставление сведений, содержащихся в Едином государственном реестре недвижимости'][7] = len(temp_predostavlenie)
+result_lenina['государственный кадастровый учет недвижимого имущества и (или) государственная регистрация прав на недвижимое имущество'][7] = len(temp_registration)
+# <<< ЛИСТ ВЫДАННЫХ ОБРАЩЕНИЙ >>>
+sheet = wb['Выданные обращения']
+max_row = sheet.max_row
+temp_predostavlenie = set()
+temp_registration = set()
+for i in range(2, max_row + 1):
+    if 'предоставление' in sheet.cell(row=i, column=6).value.lower():
+        temp_predostavlenie.add(sheet.cell(row=i, column=3).value)
+    else:
+        temp_registration.add(sheet.cell(row=i, column=3).value)
+result_lenina['предоставление сведений, содержащихся в Едином государственном реестре недвижимости'][8] = len(temp_predostavlenie)
+result_lenina['государственный кадастровый учет недвижимого имущества и (или) государственная регистрация прав на недвижимое имущество'][9] = len(temp_registration)
+wb.close()
 
-# Как мне кажется, красивый вывод результата в консоль
-print()
-print('*********************************************************************************')
-print()
-print('ОТЧЕТ ПО ТОСП')
-for k, v in temp.items():
-    print(k, ':')
-    for k_in, val_in in v.items():
-        if len(k_in)<=100:
-            print(f'   {k_in}{"."*(100-len(k_in))}: Прин. от Физ - {val_in[0]}\tВыд. Физ. - {val_in[2]}\tКонсультаций - {val_in[4]}')
+
+
+# ОТЧЕТЫ ПО ВЫДАЧЕ !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!
+# Обработка отчета по выдаче по Ильича <<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>>
+file_list = os.listdir()    # просмотр файловой системы
+for item in file_list:
+    if 'ильича' in item.lower() and 'выдача' in item.lower():
+        file = item
+wb = op.load_workbook(file, data_only=True)
+sheet = wb['Услуги МФЦ']
+max_row = sheet.max_row
+for i in range(2, max_row + 1):
+    if sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '') not in result_ilicha:
+        result_ilicha[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')] = [None, None, None, None, None, None, None]
+    result_ilicha[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')][2] = int(sheet.cell(row=i, column=4).value)
+    result_ilicha[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')][3] = int(sheet.cell(row=i, column=4).value)
+wb.close()
+# Обработка отчета по выдаче по Ленина <<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>>
+file_list = os.listdir()    # просмотр файловой системы
+for item in file_list:
+    if 'ленина' in item.lower() and 'выдача' in item.lower():
+        file = item
+wb = op.load_workbook(file, data_only=True)
+sheet = wb['Услуги МФЦ']
+max_row = sheet.max_row
+for i in range(2, max_row + 1):
+    if sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '') not in result_lenina:
+        result_lenina[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')] = [None, None, None, None, None, None, None]
+    result_lenina[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')][2] = int(sheet.cell(row=i, column=4).value)
+    result_lenina[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')][3] = int(sheet.cell(row=i, column=4).value)
+wb.close()
+
+
+
+# ОТЧЕТЫ ПО ПРИЁМУ !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!
+# Обработка отчета по приёму по Ильича <<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>>
+file_list = os.listdir()    # просмотр файловой системы
+for item in file_list:
+    if 'ильича' in item.lower() and 'приём' in item.lower():
+        file = item
+wb = op.load_workbook(file, data_only=True)
+sheet = wb['Услуги МФЦ']
+max_row = sheet.max_row
+for i in range(2, max_row + 1):
+    if sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '') not in result_ilicha:
+        result_ilicha[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')] = [None, None, None, None, None, None, None]
+    result_ilicha[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')][0] = int(sheet.cell(row=i, column=4).value)
+wb.close()
+# Обработка отчета по приёму по Ленина <<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>>
+file_list = os.listdir()    # просмотр файловой системы
+for item in file_list:
+    if 'ленина' in item.lower() and 'приём' in item.lower():
+        file = item
+wb = op.load_workbook(file, data_only=True)
+sheet = wb['Услуги МФЦ']
+max_row = sheet.max_row
+for i in range(2, max_row + 1):
+    if sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '') not in result_lenina:
+        result_lenina[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')] = [None, None, None, None, None, None, None]
+    result_lenina[sheet.cell(row=i, column=2).value.lower().rstrip().replace('\n', '')][0] = int(sheet.cell(row=i, column=4).value)
+wb.close()
+
+
+
+# ОТЧЕТЫ ПО СВЕРКАМ !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!
+# LOOOL пока пропустил, есть вопросы
+
+
+
+# ОТЧЕТЫ МИНЭКОНОМРАЗВИТИЯ !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!   !!!
+minekonom_result_ilicha = {}
+minekonom_result_lenina = {}
+sheet_list = ['федеральные услуги', 'роив', 'омсу', 'услуги иных организаций']
+def read_mineko(sheet_name: str, result_dict: dict[str, list], consultation_list: list) -> None:
+    """
+    Считывает переданный лист тамлицы инэконом
+    :param sheet_name: str
+    :param result_dict: dict[str, list]
+    :param consultation_list: list
+    :return: None
+    """
+
+    def change_value(cell_value: str | float) -> str | int | None:
+        """
+        Проверяет значение ячейки и выводит в нужном формате
+        :param cell_value: str | float
+        :return: str | int | None
+        """
+        if isinstance(cell_value, float):
+            return int(cell_value)
+        elif cell_value == '':
+            return None
+        elif 'нет' in cell_value:
+            return cell_value
         else:
-            count_iter = len(k_in)//100
-            temp_len = len(k_in) % 100
-            for i in range(count_iter+1):
-                temp_str = k_in[100 * i:100 * (i + 1)]
-                if i != count_iter:
-                    print(f'   {temp_str}')
-                else:
-                    print(f'   {temp_str}{"." * (100 - temp_len)}: Прин. от Физ - {val_in[0]}\tВыд. Физ. - {val_in[2]}\tКонсультаций - {val_in[4]}')
-    print()
-    if in_urlic == 0 and out_urlic == 0:
-        print('ПРИЕМА И ВЫДАЧИ ЮРЛИЦАМ НЕ БЫЛО!!!')
-    else:
-        if in_urlic > 0:
-            print('Был прием от ЮРЛЦ, посмотри в таблице сама!')
-        if out_urlic > 0:
-            print('Была выдача ЮРЛИЦАМ, посмотри в таблице сама!')
+            return int(cell_value)
 
-# Вывод результата в файл
-wb = op.Workbook()
-sheet = wb.active
-#fontStyle_big = openpyxl.styles.numbers.FORMAT_TEXT(size = "10")
-v_row = 2
-sheet.cell(row=1, column=2).value = 'ПРИЕМ ФИЗ'
-sheet.cell(row=1, column=3).value = 'ВЫДАЧА ФИЗ'
-sheet.cell(row=1, column=4).value = 'КОНСУЛЬТАЦИИ'
-for k, v in temp.items():
-    sheet.cell(row=v_row, column=1).value = k
-    sheet.cell(row=v_row, column=1).font = openpyxl.styles.Font(size=14, bold=True)
-    v_row += 1
-    for k_in, val_in in v.items():
-        sheet.cell(row=v_row, column=1).value = k_in
-        sheet.cell(row=v_row, column=2).value = val_in[0]
-        sheet.cell(row=v_row, column=3).value = val_in[2]
-        sheet.cell(row=v_row, column=4).value = val_in[4]
-        v_row += 1
-    v_row += 3
+    sheet = wb[sheet_name]
+    max_row = sheet.max_row
+    for i in range(8, max_row):
+        key = sheet.cell(row=i, column=5).value.lower().rstrip().replace('\n', '')
+        result_dict[key] = [change_value(sheet.cell(row=i, column=9).value),
+                            change_value(sheet.cell(row=i, column=10).value),
+                            change_value(sheet.cell(row=i, column=14).value),
+                            change_value(sheet.cell(row=i, column=15).value),
+                            change_value(sheet.cell(row=i, column=16).value),
+                            change_value(sheet.cell(row=i, column=17).value),
+                            None
+                            ]
+    consultation_list.append(change_value(sheet.cell(row=max_row, column=19).value))
 
-wb.save(f'Готовый отчет за {mon_for_name} по ТОСП для меня.xlsx')
+# Обработка отчета минэконмразвития по Ильича <<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>>
+file_list = os.listdir()    # просмотр файловой системы
+for item in file_list:
+    if 'ильича' in item.lower() and 'минэконом' in item.lower():
+        file = item
+wb = op.load_workbook(file, data_only=True)
+consultation_ilicha = []
+for sheet in sheet_list:
+    read_mineko(sheet, minekonom_result_ilicha, consultation_ilicha)
+wb.close()
+# Обработка отчета минэконмразвития по Ленина <<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>><<<>>>
+file_list = os.listdir()    # просмотр файловой системы
+for item in file_list:
+    if 'ленина' in item.lower() and 'минэконом' in item.lower():
+        file = item
+wb = op.load_workbook(file, data_only=True)
+consultation_lenina = []
+for sheet in sheet_list:
+    read_mineko(sheet, minekonom_result_lenina, consultation_lenina)
+wb.close()
+
+
+
+'''
+# Раздел вывода результатов на экран
+print('Результаты Ильича:')
+print(*result_ilicha.items(), sep='\n')
+print()
+print('Результаты Ленина:')
+print(*result_lenina.items(), sep='\n')
+'''
+
+
+
+'''
+# Разбор повторяющихся услуг в МИНЭКОНОМ И ОСТАЛЬНЫХ ОТЧЕТАХ
+mineko_result_only_positive_uslugi_list_ilicha = list(map(lambda x: x[0], filter(lambda x: any(map(lambda item: True if type(item) == int and item > 0 else False, x[1])), minekonom_result_ilicha.items())))
+mineko_result_only_positive_uslugi_list_lenina = list(map(lambda x: x[0], filter(lambda x: any(map(lambda item: True if type(item) == int and item > 0 else False, x[1])), minekonom_result_lenina.items())))
+# - - - - - - - -
+mineko_set_ilicha = set(mineko_result_only_positive_uslugi_list_ilicha)
+mineko_set_lenina = set(mineko_result_only_positive_uslugi_list_lenina)
+# - - - - - - - -
+set_ilicha = set(list(result_ilicha.keys()))
+set_lenina = set(list(result_lenina.keys()))
+# - - - - - - - -
+ilicha = mineko_set_ilicha & set_ilicha
+lenina = mineko_set_lenina & set_lenina
+print(f'Совпадений услуг из минэко и остальных отчетов: {len(ilicha)} штук по офису Ильича')
+print(f'Совпадений услуг из минэко и остальных отчетов: {len(lenina)} штук по офису Ленина')
+print('По Ильича')
+for item in ilicha:
+    print('Услуга :', item)
+    print(f'В обч. отч.: {0 if result_ilicha[item][0] == None else result_ilicha[item][0]} | {0 if result_ilicha[item][2] == None else result_ilicha[item][2]} | {0 if result_ilicha[item][3] == None else result_ilicha[item][3]} | {result_ilicha[item][4]} | {result_ilicha[item][5]}')
+    print(f'В минэконом: {minekonom_result_ilicha[item][0]} | {minekonom_result_ilicha[item][2]} | {minekonom_result_ilicha[item][3]} | {minekonom_result_ilicha[item][4]} | {minekonom_result_ilicha[item][5]}')
+    print('--------------------------------------------------------')
+print()
+print()
+print()
+print('По Ленина')
+for item in lenina:
+    print('Услуга :', item)
+    print(f'В обч. отч.: {0 if result_lenina[item][0] == None else result_lenina[item][0]} | {0 if result_lenina[item][2] == None else result_lenina[item][2]} | {0 if result_lenina[item][3] == None else result_lenina[item][3]} | {result_lenina[item][4]} | {result_lenina[item][5]}')
+    print(f'В минэконом: {minekonom_result_lenina[item][0]} | {minekonom_result_lenina[item][2]} | {minekonom_result_lenina[item][3]} | {minekonom_result_lenina[item][4]} | {minekonom_result_lenina[item][5]}')
+    print('--------------------------------------------------------')
+'''
